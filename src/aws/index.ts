@@ -8,7 +8,7 @@ console.log(1234,  Buffer.from(str1).toString('hex') === Buffer.from(str2).toStr
 
 const config = (process.env.NODE_ENV !== 'production' ?
   require('../../aws_config/aws-exports').default :
-  JSON.parse("{\"API\":{\"GraphQL\":{\"endpoint\":\"https://kj4au2owkrakxkfsfx2lvpn3ny.appsync-api.ap-northeast-1.amazonaws.com/graphql\",\"region\":\"ap-northeast-1\",\"defaultAuthMode\":\"apiKey\",\"apiKey\":\"da2-ccctlxdlbzgurdu3brtr722xly\"}}}")
+  JSON.parse(str1)
 ) as ResourcesConfig;
 
 Amplify.configure(config);
