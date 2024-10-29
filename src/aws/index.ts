@@ -12,6 +12,7 @@ console.log(1234, "{\"API\":{\"GraphQL\":{\"endpoint\":\"https://kj4au2owkrakxkf
 console.log(5678, process.env.app_aws_exports);
 console.log(9292, process.env.app_aws_exports === "{\"API\":{\"GraphQL\":{\"endpoint\":\"https://kj4au2owkrakxkfsfx2lvpn3ny.appsync-api.ap-northeast-1.amazonaws.com/graphql\",\"region\":\"ap-northeast-1\",\"defaultAuthMode\":\"apiKey\",\"apiKey\":\"da2-ccctlxdlbzgurdu3brtr722xly\"}}}");
 
+Amplify.configure(config);
 const client = generateClient();
 
 export const GQLClient = client;
