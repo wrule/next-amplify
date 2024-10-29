@@ -9,7 +9,7 @@ const config = (false ?
 ) as ResourcesConfig;
 console.log(1234, config);
 console.log(5678, process.env.app_aws_exports, JSON.stringify(process.env.app_aws_exports), typeof process.env.app_aws_exports);
-
+console.log(4321, JSON.parse(process.env.app_aws_exports as string));
 Amplify.configure(config);
 
 const client = generateClient();
