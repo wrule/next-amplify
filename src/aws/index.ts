@@ -1,8 +1,10 @@
 import { Amplify, ResourcesConfig } from 'aws-amplify';
-import config from '../../aws_config/aws-exports';
 import { generateClient } from 'aws-amplify/api';
 
-Amplify.configure(config as ResourcesConfig);
+Amplify.configure((process.env.NODE_ENV !== 'production' ?
+  require('../../aws_config/aws-exports').default :
+  JSON.parse(process.env.app_aws_exports as string)
+) as ResourcesConfig);
 
 const client = generateClient();
 
