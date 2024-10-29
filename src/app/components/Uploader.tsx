@@ -1,11 +1,39 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, type ChangeEvent } from 'react';
 
 interface ImageUploaderProps {
   maxFiles?: number;
-  maxSize?: number;
+  maxSize?: number; // MB
 }
+
+interface FileInfo {
+  name: string;
+  size: string;
+  preview: string;
+}
+
+interface AlertProps {
+  message: string;
+  type: 'success' | 'error';
+  onClose: () => void;
+}
+
+const Alert: React.FC<AlertProps> = ({ message, type, onClose }) => (
+  <div 
+    className={`fixed top-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg flex items-center gap-2 
+    animate-slideIn backdrop-blur-sm
+    ${type === 'success' ? 'bg-[#FFD93D]/90 text-yellow-900' : 'bg-red-500/90 text-white'}`}
+  >
+    <span className="font-medium">{message}</span>
+    <button 
+      onClick={onClose} 
+      className="text-current hover:opacity-75 transition-opacity"
+    >
+      ×
+    </button>
+  </div>
+);
 
 const ImageUploader: React.FC<ImageUploaderProps> = ({
   maxFiles = 10,
@@ -13,235 +41,313 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({
 }) => {
   const [images, setImages] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  const [fileInfos, setFileInfos] = useState<{ name: string; size: string }[]>([]);
-  const [width, setWidth] = useState<string>('100');
-  const [height, setHeight] = useState<string>('70');
-  const [interval, setInterval] = useState<string>('20');
-  const [touched, setTouched] = useState({
-    width: false,
-    height: false,
-    interval: false
-  });
+  const [fileInfos, setFileInfos] = useState<FileInfo[]>([]);
+  const [width, setWidth] = useState('100');
+  const [height, setHeight] = useState('70');
+  const [interval, setInterval] = useState('20');
+  const [loading, setLoading] = useState(false);
+  const [generatedGif, setGeneratedGif] = useState('');
+  const [alert, setAlert] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [shake, setShake] = useState(false);
 
-  const handleNumberInput = (
-    value: string, 
-    setter: (value: string) => void,
-    field: 'width' | 'height' | 'interval'
-  ) => {
-    const numberValue = value.replace(/\D/g, '');
-    const num = parseInt(numberValue);
-    if (numberValue === '' || num > 0) {
-      setter(numberValue);
-    }
-    setTouched(prev => ({ ...prev, [field]: true }));
-  };
+  const showAlert = useCallback((message: string, type: 'success' | 'error') => {
+    setAlert({ message, type });
+    setTimeout(() => setAlert(null), 3000);
+  }, []);
 
-  const getFieldError = (field: 'width' | 'height' | 'interval'): string => {
-    if (!touched[field]) return '';
-    const value = field === 'width' ? width : field === 'height' ? height : interval;
-    if (!value) return '此字段为必填项';
-    if (parseInt(value) <= 0) return '请输入大于0的数字';
-    return '';
-  };
-
-  const formatFileSize = (bytes: number): string => {
+  const formatFileSize = useCallback((bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
-  };
+  }, []);
+
+  const processFile = useCallback(async (file: File) => {
+    if (!file.type.match(/^image\/(png|jpe?g)$/)) {
+      showAlert('请只上传 PNG, JPG 或 JPEG 格式的图片', 'error');
+      return null;
+    }
+
+    if (file.size > maxSize * 1024 * 1024) {
+      showAlert(`文件大小不能超过 ${maxSize}MB`, 'error');
+      return null;
+    }
+
+    try {
+      return new Promise<{ base64: string; fileInfo: FileInfo } | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const result = e.target?.result as string;
+          resolve({
+            base64: result.split(',')[1],
+            fileInfo: {
+              name: file.name,
+              size: formatFileSize(file.size),
+              preview: result
+            }
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    } catch (error) {
+      console.error('文件处理错误:', error);
+      showAlert('文件处理失败', 'error');
+      return null;
+    }
+  }, [maxSize, formatFileSize, showAlert]);
 
   const handleFiles = useCallback(async (files: FileList) => {
     if (images.length + files.length > maxFiles) {
-      alert(`最多只能上传${maxFiles}张图片`);
+      showAlert(`最多只能上传${maxFiles}张图片`, 'error');
       return;
     }
-
-    const processFile = async (file: File) => {
-      if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-        alert('请只上传 PNG, JPG 或 JPEG 格式的图片');
-        return null;
-      }
-
-      if (file.size > maxSize * 1024 * 1024) {
-        alert(`文件大小不能超过 ${maxSize}MB`);
-        return null;
-      }
-
-      try {
-        const reader = new FileReader();
-        const base64 = await new Promise<string>((resolve) => {
-          reader.onload = (e) => resolve((e.target?.result as string).split(',')[1]);
-          reader.readAsDataURL(file);
-        });
-
-        return {
-          base64,
-          fileInfo: {
-            name: file.name,
-            size: formatFileSize(file.size)
-          }
-        };
-      } catch (error) {
-        console.error('文件处理错误:', error);
-        return null;
-      }
-    };
 
     const results = await Promise.all(Array.from(files).map(processFile));
     const validResults = results.filter((result): result is NonNullable<typeof result> => result !== null);
 
     setImages(prev => [...prev, ...validResults.map(r => r.base64)]);
     setFileInfos(prev => [...prev, ...validResults.map(r => r.fileInfo)]);
-  }, [images.length, maxFiles, maxSize]);
+  }, [images.length, maxFiles, processFile]);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
   }, []);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(false);
-    handleFiles(e.dataTransfer.files);
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      handleFiles(files);
+    }
   }, [handleFiles]);
+
+  const handleFileInput = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleFiles(files);
+    }
+    e.target.value = '';
+  }, [handleFiles]);
+
+  const handleUploadClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    document.getElementById('fileInput')?.click();
+  }, []);
 
   const removeImage = useCallback((index: number) => {
     setImages(prev => prev.filter((_, i) => i !== index));
     setFileInfos(prev => prev.filter((_, i) => i !== index));
   }, []);
 
-  const isValidInputs = (): boolean => {
-    return Boolean(width && height && interval && 
-      parseInt(width) > 0 && parseInt(height) > 0 && parseInt(interval) > 0);
-  };
+  const handleNumberInput = useCallback((
+    e: ChangeEvent<HTMLInputElement>,
+    setter: (value: string) => void
+  ) => {
+    const value = e.target.value.replace(/\D/g, '');
+    setter(value);
+  }, []);
+
+  const handleSubmit = useCallback(async () => {
+    if (images.length === 0 || loading) return;
+    
+    setLoading(true);
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          width: parseInt(width) || 100,
+          height: parseInt(height) || 70,
+          interval: parseInt(interval) || 20,
+          images
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const data = await response.json();
+      setGeneratedGif(`data:image/gif;base64,${data.data.gif}`);
+      showAlert('生成成功！', 'success');
+      setShake(true);
+      setTimeout(() => setShake(false), 1000);
+    } catch (error) {
+      console.error('上传错误:', error);
+      showAlert('生成失败，请重试', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [images, width, height, interval, loading, showAlert]);
+
+  const handleDownload = useCallback(() => {
+    if (!generatedGif) return;
+    
+    const link = document.createElement('a');
+    link.href = generatedGif;
+    link.download = `generated-${Date.now()}.gif`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }, [generatedGif]);
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="mb-6">
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            {[
-              { label: '宽度', value: width, setter: setWidth, field: 'width' as const },
-              { label: '高度', value: height, setter: setHeight, field: 'height' as const },
-              { label: '播放间隔', value: interval, setter: setInterval, field: 'interval' as const }
-            ].map(({ label, value, setter, field }) => (
-              <div key={label}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {label}<span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={value}
-                  onChange={(e) => handleNumberInput(e.target.value, setter, field)}
-                  onBlur={() => setTouched(prev => ({ ...prev, [field]: true }))}
-                  className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500
-                    ${getFieldError(field) ? 'border-red-500' : 'border-gray-300'}`}
-                  placeholder="输入大于0的数字"
-                />
-                {getFieldError(field) && (
-                  <p className="mt-1 text-xs text-red-500">{getFieldError(field)}</p>
-                )}
-              </div>
-            ))}
-          </div>
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">图片上传</h2>
-          <p className="text-sm text-gray-500">支持格式: PNG, JPG, JPEG</p>
-        </div>
-
+    <div className="w-full max-w-2xl mx-auto p-4 space-y-8">
+      {alert && (
+        <Alert
+          message={alert.message}
+          type={alert.type}
+          onClose={() => setAlert(null)}
+        />
+      )}
+      
+      <div
+        className={`relative transition-all duration-300 ease-in-out
+          ${isDragging ? 'transform scale-105' : 'hover:scale-[1.02]'}`}
+      >
         <div
-          className={`relative border-2 border-dashed rounded-lg p-6 transition-all
-            ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}
-            ${images.length === 0 ? 'h-48' : ''}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
+          onClick={handleUploadClick}
+          className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer
+            ${isDragging 
+              ? 'border-[#FFD93D] bg-[#FFD93D]/10' 
+              : 'border-gray-300 hover:border-[#FFD93D] hover:bg-[#FFD93D]/5'}`}
         >
           <input
             type="file"
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            onChange={(e) => e.target.files && handleFiles(e.target.files)}
-            accept=".png,.jpg,.jpeg"
+            accept="image/png,image/jpeg,image/jpg"
+            onChange={handleFileInput}
             multiple
+            className="hidden"
+            id="fileInput"
           />
-
-          {images.length === 0 ? (
-            <div className="text-center">
-              <svg 
-                className="mx-auto h-12 w-12 text-gray-400" 
-                stroke="currentColor" 
-                fill="none" 
-                viewBox="0 0 48 48"
-              >
-                <path 
-                  d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" 
-                  strokeWidth="2" 
-                  strokeLinecap="round" 
-                  strokeLinejoin="round" 
-                />
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-12 h-12 text-[#FFD93D]">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
-              <p className="mt-1 text-sm text-gray-600">点击上传或拖拽图片到此处</p>
-              <p className="mt-1 text-xs text-gray-500">
-                支持 PNG, JPG, JPEG 格式，单个文件最大 {maxSize}MB
-              </p>
             </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {images.map((image, index) => (
-                <div key={index} className="relative group">
-                  <img
-                    src={`data:image/jpeg;base64,${image}`}
-                    alt={`上传图片 ${index + 1}`}
-                    className="w-full h-32 object-cover rounded-lg"
-                  />
-                  <button
-                    onClick={() => removeImage(index)}
-                    className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 
-                             opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <div className="mt-1 text-xs text-gray-500">
-                    <p className="truncate">{fileInfos[index]?.name}</p>
-                    <p>{fileInfos[index]?.size}</p>
-                  </div>
-                </div>
-              ))}
+            <div>
+              <span className="font-medium text-[#FFD93D] hover:text-[#FFC93D] transition-colors">
+                点击上传
+              </span>
+              <span className="text-gray-500 ml-2">或将文件拖放到此处</span>
             </div>
-          )}
-        </div>
-
-        {images.length > 0 && (
-          <div className="mt-4">
-            <p className="text-sm text-gray-600">
-              已上传 {images.length} / {maxFiles} 张图片
+            <p className="text-sm text-gray-500">
+              支持 PNG、JPG 格式，每个文件不超过 {maxSize}MB
             </p>
           </div>
-        )}
-
-        <div className="mt-6">
-          <button
-            onClick={() => console.log({ width, height, interval, images })}
-            disabled={images.length === 0 || !isValidInputs()}
-            className={`w-full py-2 px-4 rounded-md transition-colors
-              ${images.length > 0 && isValidInputs()
-                ? 'bg-blue-500 hover:bg-blue-600 text-white' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }
-            `}
-          >
-            生成
-          </button>
         </div>
       </div>
+
+      {fileInfos.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {fileInfos.map((file, index) => (
+            <div 
+              key={index} 
+              className="relative group animate-fadeIn"
+            >
+              <div className="aspect-square rounded-lg overflow-hidden bg-gray-100">
+                <img
+                  src={file.preview}
+                  alt={file.name}
+                  className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                />
+              </div>
+              <button
+                onClick={() => removeImage(index)}
+                className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 
+                         group-hover:opacity-100 transition-all duration-200 transform hover:scale-110"
+                aria-label="删除图片"
+              >
+                ×
+              </button>
+              <div className="mt-2 text-sm text-gray-500 truncate px-1">
+                {file.name}
+                <div className="text-xs text-gray-400">
+                  {file.size}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: '宽度', value: width, setter: setWidth },
+          { label: '高度', value: height, setter: setHeight },
+          { label: '间隔', value: interval, setter: setInterval }
+        ].map((field) => (
+          <div key={field.label}>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {field.label} {field.label === '间隔' ? '(毫秒)' : '(像素)'}
+            </label>
+            <input
+              type="text"
+              value={field.value}
+              onChange={e => handleNumberInput(e, field.setter)}
+              className="w-full px-3 py-2 border rounded-lg transition-all duration-200
+                       border-gray-300 focus:border-[#FFD93D] focus:ring-2 focus:ring-[#FFD93D]/20
+                       focus:outline-none"
+            />
+          </div>
+        ))}
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={images.length === 0 || loading}
+        className={`w-full py-3 px-4 rounded-lg text-yellow-900 font-medium transition-all duration-300
+          ${images.length === 0 || loading
+            ? 'bg-gray-200 cursor-not-allowed'
+            : 'bg-[#FFD93D] hover:bg-[#FFC93D] hover:shadow-lg hover:shadow-[#FFD93D]/20 active:transform active:scale-95'
+          }`}
+      >
+        {loading ? (
+          <span className="flex items-center justify-center">
+            <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-yellow-900" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            处理中...
+          </span>
+        ) : '生成 GIF'}
+      </button>
+
+      {generatedGif && (
+        <div className="flex flex-col items-center space-y-4 animate-fadeIn">
+          <h3 className="text-lg font-medium text-gray-800">生成的 GIF</h3>
+          <div className={`relative rounded-lg overflow-hidden shadow-2xl
+            ${shake ? 'animate-shake' : ''}`}>
+            <img
+              src={generatedGif}
+              alt="Generated GIF"
+              className="max-w-full h-auto"
+            />
+          </div>
+          <button
+            onClick={handleDownload}
+            className="px-6 py-2 bg-[#FFD93D] text-yellow-900 rounded-lg font-medium
+                     hover:bg-[#FFC93D] transition-all duration-300 hover:shadow-lg 
+                     hover:shadow-[#FFD93D]/20 active:transform active:scale-95"
+          >
+            下载 GIF
+          </button>
+        </div>
+      )}
     </div>
   );
 };
