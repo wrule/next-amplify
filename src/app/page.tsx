@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { GQLClient } from '@/aws';
 import { gif } from '@/graphql/queries';
+import ImageUploader from './components/Uploader';
 
 export default async function Home() {
   const res = await GQLClient.graphql({
@@ -20,6 +21,7 @@ export default async function Home() {
     <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
       <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
         <img src={`data:image/gif;base64,${res.data.gif}`} alt="MyGif" />
+        <ImageUploader maxSize={0.2} maxFiles={10} />
         <Image
           className="dark:invert"
           src="https://nextjs.org/icons/next.svg"
