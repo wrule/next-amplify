@@ -1,6 +1,3 @@
-import Image from 'next/image';
-import { GQLClient } from '@/aws';
-import { gif } from '@/graphql/queries';
 import ImageUploader from './components/Uploader';
 
 export default async function Home() {
