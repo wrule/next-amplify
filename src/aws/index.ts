@@ -6,7 +6,7 @@ const str2 = (process.env.app_aws_exports as string)?.slice();
 
 console.log(1234,  Buffer.from(str1).toString('hex') === Buffer.from(str2).toString('hex'));
 
-const config = (process.env.NODE_ENV !== 'production' ?
+const config = (process.env.NODE_ENV === 'production' ?
   require('../../aws_config/aws-exports').default :
   JSON.parse(str1)
 ) as ResourcesConfig;
