@@ -41,10 +41,7 @@ export async function POST(request: Request) {
   }
 }
 
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: '10mb'
-    }
-  }
-};
+// 使用新的路由段配置
+export const maxDuration = 60; // 设置最大执行时间
+export const dynamic = 'force-dynamic'; // 强制动态渲染
+export const runtime = 'nodejs'; // 使用 Node.js 运行时
