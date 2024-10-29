@@ -8,7 +8,7 @@ console.log(1234, str1 === str2);
 
 const config = (process.env.NODE_ENV !== 'production' ?
   require('../../aws_config/aws-exports').default :
-  JSON.parse(str2)
+  JSON.parse(str1)
 ) as ResourcesConfig;
 
 Amplify.configure(config);
