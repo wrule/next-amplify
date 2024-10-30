@@ -6,7 +6,7 @@ const jsonText2 = process.env.NEXT_APP_CONFIG as string;
 
 console.log(1234, jsonText1 === jsonText2);
 
-let env = { ...process.env };
+const env = { ...process.env };
 const config = JSON.parse(jsonText2 === undefined ? jsonText1 : jsonText2) as ResourcesConfig;
 
 Amplify.configure(config);
